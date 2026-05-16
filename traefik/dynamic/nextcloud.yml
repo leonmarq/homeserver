@@ -1,0 +1,15 @@
+http:
+  routers:
+    nextcloud:
+      rule: Host(`cloud.aiomvp.com`)
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: nextcloud
+
+  services:
+    nextcloud:
+      loadBalancer:
+        servers:
+          - url: http://nextcloud-aio-apache:11000

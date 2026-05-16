@@ -1,0 +1,32 @@
+name: ftp-stack
+
+services:
+  ftp:
+    image: fauria/vsftpd:latest
+    container_name: ftp-server
+    restart: unless-stopped
+    entrypoint:
+      - /bin/bash
+      - /start-vsftpd.sh
+    environment:
+      FTP_USER: ${FTP_USER}
+      FTP_PASS: ${FTP_PASS}
+      PASV_ADDRESS: ${FTP_PASV_ADDRESS}
+      PASV_ADDR_RESOLVE: "YES"
+      PASV_MIN_PORT: 21000
+      PASV_MAX_PORT: 21003
+      FILE_OPEN_MODE: 0666
+      LOCAL_UMASK: 022
+      XFERLOG_STD_FORMAT: "YES"
+      REVERSE_LOOKUP_ENABLE: "NO"
+      LOG_STDOUT: "YES"
+      TZ: ${TIMEZONE}
+    ports:
+      - "21:21"
+      - "21000-21003:21000-21003"
+    volumes:
+      - ./ftp-data:/home/vsftpd
+      - ./ftp-logs:/var/log/vsftpd
+      - ./ftp-config/vsftpd.conf:/etc/vsftpd/vsftpd.conf.template:ro
+      - ./scripts/start-vsftpd.sh:/start-vsftpd.sh:ro
+      - ./ftp-certs:/etc/ssl/private/ftps:ro

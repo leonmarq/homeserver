@@ -1,0 +1,15 @@
+http:
+  routers:
+    hello:
+      rule: Host(`www.aiomvp.com`)
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: hello
+
+  services:
+    hello:
+      loadBalancer:
+        servers:
+          - url: http://hello-site:80

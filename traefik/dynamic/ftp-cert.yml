@@ -1,0 +1,15 @@
+http:
+  routers:
+    ftp-cert:
+      rule: Host(`ftp.aiomvp.com`)
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: ftp-cert
+
+  services:
+    ftp-cert:
+      loadBalancer:
+        servers:
+          - url: http://hello-site:80

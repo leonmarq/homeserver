@@ -1,0 +1,44 @@
+name: edge-proxy
+
+services:
+  traefik:
+    image: traefik:v3.6.6
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - --api.dashboard=true
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.encodedCharacters.allowEncodedSlash=true
+      - --entrypoints.web.http.encodedCharacters.allowEncodedQuestionMark=true
+      - --entrypoints.websecure.http.encodedCharacters.allowEncodedSlash=true
+      - --entrypoints.websecure.http.encodedCharacters.allowEncodedQuestionMark=true
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --certificatesresolvers.letsencrypt.acme.email=${EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/acme/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./traefik/acme:/acme
+    networks:
+      - proxy
+
+  hello-site:
+    image: nginx:alpine
+    container_name: hello-site
+    restart: unless-stopped
+    volumes:
+      - ./hello-site/index.html:/usr/share/nginx/html/index.html:ro
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    name: proxy

@@ -1,0 +1,5 @@
+.env
+ftp-data/*
+ftp-logs/*
+traefik/acme/*
+ftp-certs/ftp.key
