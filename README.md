@@ -2,9 +2,9 @@
 
 This folder now uses **multiple compose files**:
 
-- `docker-compose.proxy.yml`: Traefik reverse proxy + `aiomvp.com` hello page
+- `docker-compose.proxy.yml`: Traefik reverse proxy + `<domain_name>.com` hello page
 - `docker-compose.yml`: Nextcloud AIO master container (proxied through Traefik)
-- `docker-compose.ftp.yml`: FTP/FTPS server on `ftp.aiomvp.com`
+- `docker-compose.ftp.yml`: FTP/FTPS server on `ftp.<domain_name>.com`
 
 ## Why multiple compose files?
 
@@ -16,18 +16,18 @@ Yes, this is recommended. It keeps blast radius low and makes updates easier:
 
 ## Important protocol note
 
-`cloud.aiomvp.com` and `aiomvp.com` are reverse-proxied by Traefik (HTTP/HTTPS).
+`cloud.<domain_name>.com` and `<domain_name>.com` are reverse-proxied by Traefik (HTTP/HTTPS).
 
 FTP is **not HTTP**, so it is exposed directly on ports `21` and `21000-21003`.
-You still use DNS name `ftp.aiomvp.com`.
+You still use DNS name `ftp.<domain_name>.com`.
 
 ## DNS (DynDNS)
 
 Create/keep these records pointing to your home public IP (via DynDNS updates):
 
-- `aiomvp.com` -> your public IP
-- `cloud.aiomvp.com` -> your public IP
-- `ftp.aiomvp.com` -> your public IP
+- `<domain_name>.com` -> your public IP
+- `cloud.<domain_name>.com` -> your public IP
+- `ftp.<domain_name>.com` -> your public IP
 
 ## Router/NAT forwards to this Docker host
 
@@ -38,7 +38,7 @@ Create/keep these records pointing to your home public IP (via DynDNS updates):
 
 ## Bring up services
 
-From `/opt/com_aiomvp`:
+From `/opt/com_<domain_name>`:
 
 ```bash
 docker compose -f docker-compose.proxy.yml --env-file .env up -d
@@ -55,20 +55,20 @@ For FTPS, create a certificate before starting the FTP stack:
 Then open:
 
 - Nextcloud AIO UI: `https://<server-ip>:8080`
-- Root page: `https://aiomvp.com`
-- Cloud: `https://cloud.aiomvp.com`
-- FTP host in client: `ftp.aiomvp.com` (Explicit FTPS on port `21`)
+- Root page: `https://<domain_name>.com`
+- Cloud: `https://cloud.<domain_name>.com`
+- FTP host in client: `ftp.<domain_name>.com` (Explicit FTPS on port `21`)
 
 ## FTP variables
 
-- `FTP_DOMAIN`: the hostname clients use, for example `ftp.aiomvp.com`
+- `FTP_DOMAIN`: the hostname clients use, for example `ftp.<domain_name>.com`
 - `FTP_PASV_ADDRESS`: the address returned for passive connections
 
-For your Nextcloud container on the same host, `FTP_PASV_ADDRESS` should stay on the LAN IP. If you also need external clients, use split DNS so `ftp.aiomvp.com` resolves to the LAN IP internally and the public IP externally.
+For your Nextcloud container on the same host, `FTP_PASV_ADDRESS` should stay on the LAN IP. If you also need external clients, use split DNS so `ftp.<domain_name>.com` resolves to the LAN IP internally and the public IP externally.
 
 ## Nextcloud AIO first-run
 
-In AIO, use domain `cloud.aiomvp.com` and finish setup normally.
+In AIO, use domain `cloud.<domain_name>.com` and finish setup normally.
 
 ## Reserve space for third service
 
@@ -78,11 +78,11 @@ Add a new compose file like `docker-compose.service3.yml`, connect service to `p
 ### inital Setup:
 - make sure my server has a stable connection with a static local Ip-Adress
 - find a Domain. I use Strato currently.
-- create a subdomain with prefix: cloud.<domainname>. then find your homenetworks public-ip and set the A record.  
+- create a subdomain with prefix: cloud.<domainname>. then find your homenetworks public-ip and set the A record.
 - follow the provided guide with no extra features: https://github.com/nextcloud/all-in-one
 - make sure it's acessible from outside your LAN.
 - If the public Ip changes regularly, get flexible and set a DynDNS instead of A record:
-  - tutorial for my setup: https://www.strato.de/faq/hosting/so-einfach-richten-sie-dyndns-fuer-ihre-domains-ein/ 
+  - tutorial for my setup: https://www.strato.de/faq/hosting/so-einfach-richten-sie-dyndns-fuer-ihre-domains-ein/
   - otherwise what to do is set domain to dynDns instead of A record. then you need to configure your router to connect your server with the service.
   - For my setup local access was blocked, because of ipv6 dyndns support interfering with DNS-Rebind protection and quick fix is to not implement <ip6addr>
 
@@ -112,4 +112,4 @@ Add a new compose file like `docker-compose.service3.yml`, connect service to `p
 ## Sources:
 - https://github.com/raspberrypi/firmware/blob/master/boot/overlays/README
 - https://github.com/lmarquar/Nextcloud_on_Raspi_commands
-- 
+-
