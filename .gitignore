@@ -3,3 +3,5 @@ ftp-data/*
 ftp-logs/*
 traefik/acme/*
 ftp-certs/ftp.key
+secrets/*
+!secrets/.gitkeep
