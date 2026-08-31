@@ -1,115 +1,285 @@
-# Multi-service setup (Traefik + Nextcloud AIO + FTP/FTPS)
+# Homeserver
 
-This folder now uses **multiple compose files**:
+Docker-based home services hosted from `/opt/homeserver`:
 
-- `docker-compose.proxy.yml`: Traefik reverse proxy + `<domain_name>.com` hello page
-- `docker-compose.yml`: Nextcloud AIO master container (proxied through Traefik)
-- `docker-compose.ftp.yml`: FTP/FTPS server on `ftp.<domain_name>.com`
+- Traefik for HTTP/HTTPS routing and Let's Encrypt certificates
+- Nextcloud AIO and Collabora Online
+- Explicit FTPS for cameras and file exchange
+- A private PostgreSQL database for the Stimmapp PID verifier
+- Encrypted PostgreSQL backups with restic
 
-## Why multiple compose files?
+Each service has its own Compose file so it can be maintained independently.
 
-Yes, this is recommended. It keeps blast radius low and makes updates easier:
+## Network layout
 
-- proxy can restart independently
-- Nextcloud AIO remains close to official config
-- FTP can be changed/replaced without touching cloud/proxy
+Traefik publishes the root website and Nextcloud over HTTP/HTTPS. FTPS is not an
+HTTP protocol and exposes its ports directly. PostgreSQL is available only on
+its internal Docker network and must never publish port `5432`.
 
-## Important protocol note
+Required router/NAT forwards:
 
-`cloud.<domain_name>.com` and `<domain_name>.com` are reverse-proxied by Traefik (HTTP/HTTPS).
+| Protocol | Host ports | Purpose |
+| --- | --- | --- |
+| TCP | `80`, `443` | Traefik HTTP/HTTPS |
+| TCP | `21` | Explicit FTPS control connection |
+| TCP | `21000-21003` | FTPS passive data connections |
 
-FTP is **not HTTP**, so it is exposed directly on ports `21` and `21000-21003`.
-You still use DNS name `ftp.<domain_name>.com`.
+Point the root, `cloud`, and `ftp` DNS records at the home public IP. Use DynDNS
+if that address changes. With Strato, follow its DynDNS documentation and have
+the router update the record. If IPv6 DynDNS causes local DNS-rebind failures,
+omit the IPv6 address until split DNS is configured.
 
-## DNS (DynDNS)
+Use a static LAN address for the Docker host. For local and remote FTPS access,
+split DNS should resolve the FTP hostname to the LAN address internally and the
+public address externally.
 
-Create/keep these records pointing to your home public IP (via DynDNS updates):
+## Initial host setup
 
-- `<domain_name>.com` -> your public IP
-- `cloud.<domain_name>.com` -> your public IP
-- `ftp.<domain_name>.com` -> your public IP
+Install and enable SSH:
 
-## Router/NAT forwards to this Docker host
+```bash
+sudo apt update
+sudo apt install -y openssh-server
+sudo systemctl enable --now ssh
+sudo systemctl status ssh --no-pager
+```
 
-- TCP `80` -> host `80`
-- TCP `443` -> host `443`
-- TCP `21` -> host `21`
-- TCP `21000-21003` -> host `21000-21003`
+For a Debian desktop host that must remain continuously available, create
+`/etc/systemd/logind.conf.d/00-nosleep.conf`:
 
-## Bring up services
+```ini
+[Login]
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+IdleAction=ignore
+```
 
-From `/opt/com_<domain_name>`:
+Apply it and prevent suspend or hibernation:
+
+```bash
+sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+sudo systemctl restart systemd-logind
+```
+
+If a GNOME session runs, disable its separate idle behavior:
+
+```bash
+gsettings set org.gnome.desktop.session idle-delay 0
+gsettings set org.gnome.desktop.screensaver lock-enabled false
+gsettings set org.gnome.desktop.screensaver idle-activation-enabled false
+```
+
+Create `.env` from `.env-example`, fill in the domain and credentials, and keep
+secret files under `secrets/`. Neither `.env` nor secret contents belong in Git.
+
+## Starting the services
+
+Run commands from `/opt/homeserver`:
 
 ```bash
 docker compose -f docker-compose.proxy.yml --env-file .env up -d
 docker compose -f docker-compose.nextcloud.yml --env-file .env up -d
 docker compose -f docker-compose.ftp.yml --env-file .env up -d
+docker compose -f docker-compose.collabora.yml --env-file .env up -d
+docker compose -f docker-compose.stimmapp-dev-postgres.yml up -d
 ```
 
-For FTPS, create a certificate before starting the FTP stack:
+Before the first FTPS start, create its certificate if one has not already been
+exported from Traefik:
 
 ```bash
 ./scripts/generate-ftps-cert.sh
 ```
 
-Then open:
+Relevant endpoints:
 
-- Nextcloud AIO UI: `https://<server-ip>:8080`
-- Root page: `https://<domain_name>.com`
-- Cloud: `https://cloud.<domain_name>.com`
-- FTP host in client: `ftp.<domain_name>.com` (Explicit FTPS on port `21`)
+- Nextcloud: `https://cloud.<domain>`
+- Nextcloud AIO administration: `https://<server-lan-ip>:8080`
+- Root site: `https://<domain>`
+- Explicit FTPS: `ftp.<domain>`, port `21`
 
-## FTP variables
+In the Nextcloud AIO first-run interface, configure `cloud.<domain>` as the
+hostname. Enable optional AIO containers carefully because they may require
+ports already used by another service.
 
-- `FTP_DOMAIN`: the hostname clients use, for example `ftp.<domain_name>.com`
-- `FTP_PASV_ADDRESS`: the address returned for passive connections
+## FTPS storage
 
-For your Nextcloud container on the same host, `FTP_PASV_ADDRESS` should stay on the LAN IP. If you also need external clients, use split DNS so `ftp.<domain_name>.com` resolves to the LAN IP internally and the public IP externally.
+The FTPS container maps `/home/vsftpd` to `/opt/homeserver/ftp-data`.
+`FTP_DOMAIN` is the client hostname. `FTP_PASV_ADDRESS` is the address returned
+for passive connections and must resolve correctly from the client's network.
 
-## Nextcloud AIO first-run
+Nextcloud mounts `/opt/homeserver/ftp-data`, allowing camera uploads to be made
+available through Nextcloud.
 
-In AIO, use domain `cloud.<domain_name>.com` and finish setup normally.
+## Nextcloud operations
 
-## Reserve space for third service
+```bash
+# List containers and their status.
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
 
-Add a new compose file like `docker-compose.service3.yml`, connect service to `proxy` network, then attach Traefik labels (or a dynamic file route).
+# Follow the Nextcloud log.
+docker exec -it nextcloud-aio-nextcloud tail -f data/nextcloud.log
 
-## Homecloud:
-### inital Setup:
-- make sure my server has a stable connection with a static local Ip-Adress
-- find a Domain. I use Strato currently.
-- create a subdomain with prefix: cloud.<domainname>. then find your homenetworks public-ip and set the A record.
-- follow the provided guide with no extra features: https://github.com/nextcloud/all-in-one
-- make sure it's acessible from outside your LAN.
-- If the public Ip changes regularly, get flexible and set a DynDNS instead of A record:
-  - tutorial for my setup: https://www.strato.de/faq/hosting/so-einfach-richten-sie-dyndns-fuer-ihre-domains-ein/
-  - otherwise what to do is set domain to dynDns instead of A record. then you need to configure your router to connect your server with the service.
-  - For my setup local access was blocked, because of ipv6 dyndns support interfering with DNS-Rebind protection and quick fix is to not implement <ip6addr>
+# Run an occ command.
+docker exec --user www-data -it nextcloud-aio-nextcloud \
+  php /var/www/html/occ <command>
 
-### further improvements
-- set automatic updates as found in the nextcloud-aio Docs
-- Backup: set up a proper SSD with ext4-fileformat and automounting via /etc/fstab. Then configure borg-backup.
-- Email-Server: configured it with my mail account wich was provided with the domain by strato. Good for resetting your password!
-- Phone-Sync: Contacts, Calendar, Task-list work alright with Davx5 and Tasks, which i got for free from F-Droid.
+# Read the AIO interface/Borg password.
+docker exec nextcloud-aio-mastercontainer \
+  grep password /mnt/docker-aio-config/data/configuration.json
+```
 
-- Bonus: get rid of all warnings in your nc-settings.
+The AIO configuration lives in Docker volume `nextcloud_aio_mastercontainer`,
+under `data/configuration.json`. Prefer the AIO interface over editing it
+directly.
 
-### be careful with:
-- optional NC containers which like to use ports, like to interfere and lead to random bugs.
-- saving all your passwords well. I'm still with keepass on usb since 12 year old for all the rudimentary.
+### External SMB storage
 
-### still working on
-- resolve occasional certificate-issues when trying to access from the local net. Solvable with PiHole or BIND?
-- FTP-compatability: nextcloud-aio does not support connecting via ftp. but my security camera can only transfer to ftp. i need a secondary ftp-instance. which i can access from both nextcloud and the camera...
+Create and verify an external SMB mount:
 
-### Useful commands:
-#### AIO interface/borg password
-`sudo docker exec nextcloud-aio-mastercontainer grep password /mnt/docker-aio-config/data/configuration.json`
+```bash
+docker exec -u www-data -it nextcloud-aio-nextcloud \
+  php occ files_external:create /NAS smb password::password \
+  -c host="192.168.2.254" \
+  -c share="NAS_Public" \
+  -c user="admin" \
+  -c password="<password>"
 
-## additional improvements
-- add cronjobs for automatic firmware-updates.
+docker exec -u www-data -it nextcloud-aio-nextcloud \
+  php occ files_external:verify <mount-id>
+```
 
-## Sources:
-- https://github.com/raspberrypi/firmware/blob/master/boot/overlays/README
-- https://github.com/lmarquar/Nextcloud_on_Raspi_commands
--
+Do not place the real SMB password in this file or shell history. Use a suitable
+credential mechanism for the final NAS setup.
+
+Contacts, calendars, and tasks can be synchronized on Android with DAVx5 and a
+CalDAV-compatible task application. Configure working email in Nextcloud so
+password-reset messages can be delivered.
+
+## PostgreSQL backups
+
+The Stimmapp PostgreSQL container is private. Backups use `docker exec` and
+`pg_dump --format=custom`; port `5432` remains unexposed.
+
+The current encrypted first-layer restic repository is:
+
+```text
+/opt/homeserver/ftp-data/.stimmapp-postgres-restic
+```
+
+This protects against database corruption and accidental deletion, but remains
+on the same physical host. Move or replicate it to the NAS or another off-server
+destination when available. Detailed backup configuration and recovery steps
+are in [`backup/README.md`](backup/README.md).
+
+```bash
+systemctl list-timers 'stimmapp-postgres-*'
+sudo journalctl \
+  -u stimmapp-postgres-backup.service \
+  -u stimmapp-postgres-restore-test.service
+```
+
+## Mounting a dedicated disk
+
+Use a stable path under `/dev/disk/by-uuid/`. A systemd mount unit must match its
+escaped mount path. For `/mnt/storage`, create `mnt-storage.mount`:
+
+```ini
+[Unit]
+Description=Mount storage disk
+
+[Mount]
+What=/dev/disk/by-uuid/<uuid>
+Where=/mnt/storage
+Type=auto
+Options=defaults
+
+[Install]
+WantedBy=multi-user.target
+```
+
+An optional `mnt-storage.automount` is:
+
+```ini
+[Unit]
+Description=Automount storage disk
+
+[Automount]
+Where=/mnt/storage
+
+[Install]
+WantedBy=multi-user.target
+```
+
+After creating the mount point and units:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now mnt-storage.automount
+```
+
+Verify the disk UUID, filesystem, ownership, and mount behavior before moving
+live service data.
+
+## Certificate maintenance
+
+The Traefik ACME store contains Let's Encrypt account data and private keys.
+Keep `traefik/acme/acme.json` out of Git, mode `0600`, and backed up securely. If
+it is exposed, rotate it while someone can monitor the services:
+
+1. Verify the root, `cloud`, and `ftp` DNS records point to this host.
+2. Copy `traefik/acme/acme.json` to secure storage outside the repository.
+3. Stop Traefik:
+
+   ```bash
+   docker compose -f docker-compose.proxy.yml --env-file .env down
+   ```
+
+4. Move the compromised store aside and create a protected replacement:
+
+   ```bash
+   sudo mv traefik/acme/acme.json \
+     "traefik/acme/acme.json.bak.$(date +%Y%m%d-%H%M%S)"
+   sudo install -m 600 /dev/null traefik/acme/acme.json
+   ```
+
+5. Restart Traefik and visit each HTTPS hostname to trigger issuance:
+
+   ```bash
+   docker compose -f docker-compose.proxy.yml --env-file .env up -d
+   ```
+
+6. Confirm new certificates were written, then refresh FTPS if required:
+
+   ```bash
+   ./scripts/export-traefik-cert.sh ftp.<domain>
+   docker compose -f docker-compose.ftp.yml --env-file .env up -d
+   ```
+
+7. Verify the website, Nextcloud, and an FTPS client. A default certificate may
+   appear briefly while Let's Encrypt issues replacements.
+
+## Maintenance and troubleshooting
+
+Copy a directory while preserving attributes and displaying progress:
+
+```bash
+rsync -av --progress /path/to/source/ /path/to/destination/
+```
+
+Do not use host-wide `docker stop` or `docker rm` commands for routine work.
+Operate on the relevant Compose project so unrelated services remain online.
+
+Outstanding infrastructure work:
+
+- migrate the PostgreSQL restic repository to NAS/off-server storage;
+- resolve occasional LAN certificate or DNS-rebind issues with split DNS;
+- configure automatic host security and firmware updates carefully;
+- review Nextcloud administration warnings after upgrades.
+
+References:
+
+- [Nextcloud All-in-One](https://github.com/nextcloud/all-in-one)
+- [Strato DynDNS](https://www.strato.de/faq/hosting/so-einfach-richten-sie-dyndns-fuer-ihre-domains-ein/)
+- [Raspberry Pi overlays](https://github.com/raspberrypi/firmware/blob/master/boot/overlays/README)
