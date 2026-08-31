@@ -5,3 +5,10 @@ traefik/acme/*
 ftp-certs/ftp.key
 secrets/*
 !secrets/.gitkeep
+# PostgreSQL/restic backups and local backup credentials
+*.dump
+backup/*.env
+backup/*password*
+.backup-staging/
+.local/restic/
+ftp-data/.stimmapp-postgres-restic/

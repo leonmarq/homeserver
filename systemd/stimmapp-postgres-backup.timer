@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Stimmapp PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+Persistent=true
+RandomizedDelaySec=30m
+Unit=stimmapp-postgres-backup.service
+
+[Install]
+WantedBy=timers.target

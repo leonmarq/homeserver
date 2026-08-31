@@ -1,0 +1,15 @@
+[Unit]
+Description=Test restoring the latest Stimmapp PostgreSQL backup
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=leon
+Group=nogroup
+Environment=STIMMAPP_BACKUP_CONFIG=/opt/homeserver/backup/stimmapp-postgres-backup.env
+ExecStart=/opt/homeserver/scripts/restore-test-stimmapp-postgres.sh
+
+[Install]
+WantedBy=multi-user.target

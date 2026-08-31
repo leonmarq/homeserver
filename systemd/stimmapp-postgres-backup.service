@@ -1,0 +1,18 @@
+[Unit]
+Description=Back up the Stimmapp PostgreSQL database with restic
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=leon
+Group=nogroup
+Environment=STIMMAPP_BACKUP_CONFIG=/opt/homeserver/backup/stimmapp-postgres-backup.env
+ExecStart=/opt/homeserver/scripts/backup-stimmapp-postgres.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+[Install]
+WantedBy=multi-user.target
