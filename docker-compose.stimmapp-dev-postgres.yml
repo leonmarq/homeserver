@@ -6,7 +6,8 @@ services:
     container_name: stimmapp-dev-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: stimmapp_pid_verifier
+      # Askar provisions its own database and schema on first startup.
+      POSTGRES_DB: postgres
       POSTGRES_USER: stimmapp_pid_verifier
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
@@ -19,7 +20,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - pg_isready -U stimmapp_pid_verifier -d stimmapp_pid_verifier
+        - pg_isready -U stimmapp_pid_verifier -d postgres
       interval: 10s
       timeout: 5s
       retries: 5

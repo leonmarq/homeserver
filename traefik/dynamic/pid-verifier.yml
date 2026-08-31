@@ -1,0 +1,15 @@
+http:
+  routers:
+    pid-verifier:
+      rule: Host(`verifier.aiomvp.com`)
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: pid-verifier
+
+  services:
+    pid-verifier:
+      loadBalancer:
+        servers:
+          - url: http://verifier:8080
